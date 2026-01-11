@@ -1,131 +1,180 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Cards from "../Components/Cards";
-import { BiMoviePlay } from "react-icons/bi";
-import "bootstrap/dist/css/bootstrap.min.css";
+import SkeletonCard from "../Components/SkeletonCard";
+import "../App.css";
 
 export default function Home() {
   const [search, setSearch] = useState("");
-  const [datas, setDatas] = useState([]);
+  const [movies, setMovies] = useState([]);
   const [recommended, setRecommended] = useState([]);
-  const [error, setError] = useState("");
-  const [loadingRec, setLoadingRec] = useState(false);
+  const [theme, setTheme] = useState("dark");
+  const [loading, setLoading] = useState(false);
+  const [infoText, setInfoText] = useState("");
 
-  //  Search movies from OMDB
+  // In-memory OMDB cache
+  const omdbCache = useRef({});
+
+  // Apply theme + load cache
+  useEffect(() => {
+    document.body.className = theme === "dark" ? "dark-theme" : "light-theme";
+
+    const savedCache = localStorage.getItem("omdbCache");
+    if (savedCache) {
+      omdbCache.current = JSON.parse(savedCache);
+    }
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(theme === "dark" ? "light" : "dark");
+  };
+
+  // 🔍 Search movies from OMDB
   async function searchMovies() {
+    if (!search.trim()) return;
+
+    setLoading(true);
+    setInfoText("Searching movies…");
+    setMovies([]);
+    setRecommended([]);
+
     try {
-      setError("");
       const res = await fetch(
         `https://www.omdbapi.com/?s=${search}&apikey=d85b58ea`
       );
       const data = await res.json();
 
-      setDatas(data.Search || []);
-      setError(data.Error || "");
-
-      // Call ML backend using first search result
-      if (data.Search && data.Search.length > 0) {
+      if (data.Search) {
+        setMovies(data.Search);
+        setInfoText(`Because you searched "${data.Search[0].Title}"`);
         fetchMLRecommendations(data.Search[0].Title);
       } else {
-        setRecommended([]);
+        setInfoText("No results found");
       }
     } catch (err) {
-      console.log(err);
-      setError("Something went wrong while searching");
+      console.error(err);
+      setInfoText("Something went wrong");
     }
+
+    setLoading(false);
   }
 
-  // Fetch recommendations from Python ML backend
-  async function fetchMLRecommendations(movieTitle) {
+  // 🤖 Fetch ML recommendations + enrich with OMDB (cached)
+  async function fetchMLRecommendations(title) {
     try {
-      setLoadingRec(true);
       const res = await fetch(
-        `https://movie-recommender-ml-backend.onrender.com/recommend?title=${movieTitle}`
+        `https://movie-recommender-ml-backend.onrender.com/recommend?title=${title}`
       );
       const data = await res.json();
-      setRecommended(data.recommendations || []);
-    } catch (error) {
-      console.log("ML backend error", error);
-    } finally {
-      setLoadingRec(false);
+
+      const enriched = await Promise.all(
+        data.recommendations.map(async (rec) => {
+          // Check cache first
+          if (omdbCache.current[rec.title]) {
+            return {
+              ...omdbCache.current[rec.title],
+              similarity: rec.similarity,
+            };
+          }
+
+          // Fetch from OMDB
+          const omdbRes = await fetch(
+            `https://www.omdbapi.com/?t=${rec.title}&apikey=d85b58ea`
+          );
+          const omdbData = await omdbRes.json();
+
+          // Save to cache
+          omdbCache.current[rec.title] = omdbData;
+          localStorage.setItem("omdbCache", JSON.stringify(omdbCache.current));
+
+          return {
+            ...omdbData,
+            similarity: rec.similarity,
+          };
+        })
+      );
+
+      setRecommended(enriched);
+    } catch (err) {
+      console.error("ML backend not responding yet");
     }
   }
 
+  // ⌨️ Enter key search
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter") searchMovies();
+  };
+
   return (
-    <>
-      {/* ================= HEADER ================= */}
-      <div className="container text-center my-4">
-        <h2 className="fw-bold text-primary">
-          AI-Based Movie Recommendation System <BiMoviePlay />
-        </h2>
-        <p className="text-muted">
-          Content-Based Filtering using Machine Learning (TF-IDF + Cosine
-          Similarity)
-        </p>
+    <div className="home-wrapper">
+      {/* ===== HEADER ===== */}
+      <header className="top-bar">
+        <h1 className="app-title">MovieLens AI</h1>
+        <button className="theme-btn" onClick={toggleTheme}>
+          {theme === "dark" ? "Light Mode" : "Dark Mode"}
+        </button>
+      </header>
 
-        <div className="d-flex justify-content-center my-3">
-          <input
-            className="form-control w-50 me-2"
-            type="search"
-            placeholder="Search a movie (e.g. Inception)"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <button className="btn btn-primary" onClick={searchMovies}>
-            Search
-          </button>
+      {/* ===== SEARCH ===== */}
+      <section className="search-section">
+        <input
+          className="search-input"
+          type="text"
+          placeholder="Search a movie and press Enter…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={handleKeyDown}
+        />
+      </section>
+
+      {/* ===== IDLE STATE ===== */}
+      {!loading && movies.length === 0 && !infoText && (
+        <div className="idle-state">
+          <h2>🎬 Welcome to MovieLens AI</h2>
+          <p>
+            Discover movies intelligently using Machine Learning–based
+            recommendations.
+          </p>
+          <p className="muted">
+            Try searching for: Inception, Interstellar, Avatar, Titanic
+          </p>
         </div>
+      )}
 
-        {error && <p className="text-danger fw-bold">{error}</p>}
-      </div>
+      {/* ===== INFO TEXT ===== */}
+      {infoText && <p className="info-text">{infoText}</p>}
 
-      {/* ================= SEARCH RESULTS ================= */}
-      {datas.length > 0 && (
-        <>
-          <h3 className="section-title">🔍 Search Results</h3>
-          <div className="my-col">
-            {datas.map((movie, index) => (
-              <Cards key={index} data={movie} />
+      {/* ===== LOADING SKELETON ===== */}
+      {loading && (
+        <div className="movie-grid">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <SkeletonCard key={i} />
+          ))}
+        </div>
+      )}
+
+      {/* ===== SEARCH RESULTS ===== */}
+      {movies.length > 0 && !loading && (
+        <section className="section">
+          <h3 className="section-title">Search Results</h3>
+          <div className="movie-grid">
+            {movies.map((movie, i) => (
+              <Cards key={i} data={movie} />
             ))}
           </div>
-        </>
+        </section>
       )}
 
-      {/* ================= ML RECOMMENDATIONS ================= */}
-      <h3 className="section-title">🤖 ML Recommended Movies</h3>
-
-      {loadingRec && (
-        <p style={{ marginLeft: "20px" }}>
-          Generating recommendations using Machine Learning...
-        </p>
-      )}
-
-      <div className="my-col">
-        {recommended.map((title, index) => (
-          <div key={index} className="container-card">
-            <div className="card">
-              <div className="card-body text-center">
-                <h5 className="card-title">{title}</h5>
-                <p className="card-text text-muted">
-                  Recommended based on content similarity
-                </p>
-              </div>
-            </div>
+      {/* ===== AI RECOMMENDATIONS ===== */}
+      {recommended.length > 0 && (
+        <section className="section">
+          <h3 className="section-title">Recommended for You (AI)</h3>
+          <div className="movie-grid">
+            {recommended.map((movie, i) => (
+              <Cards key={i} data={movie} similarity={movie.similarity} />
+            ))}
           </div>
-        ))}
-      </div>
-
-      {/* ================= HOW IT WORKS ================= */}
-      <div className="container my-5">
-        <h4 className="fw-bold">🧠 How the Recommendation Works</h4>
-        <p>
-          This system uses a <b>content-based recommendation algorithm</b>.
-          Movie metadata such as <b>genre</b> and <b>plot</b> is converted into
-          numerical vectors using <b>TF-IDF vectorization</b>.
-          <b> Cosine similarity</b> is then used to find movies that are most
-          similar to the user’s searched movie, and the top results are
-          recommended.
-        </p>
-      </div>
-    </>
+        </section>
+      )}
+    </div>
   );
 }

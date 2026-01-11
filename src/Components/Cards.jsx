@@ -1,28 +1,29 @@
-import React from 'react'
+import React from "react";
+import { Link } from "react-router-dom";
+import "../App.css";
 
-import { Link } from 'react-router-dom'
-export default function Cards({ data }) {
+export default function Cards({ data, similarity }) {
+  const poster =
+    data.Poster && data.Poster !== "N/A"
+      ? data.Poster
+      : "https://via.placeholder.com/300x450?text=No+Image";
 
+  return (
+    <Link to={`/detail/${data.imdbID}`} className="movie-card">
+      <div className="movie-card-inner">
+        <div className="poster-wrapper">
+          <img src={poster} alt={data.Title} />
 
-    return (
-     
-        <div className="container-card">
-            <div className="card">
-                <div className="img-outer">  <img src={data.Poster === "N/A" ? "https://th.bing.com/th/id/OIP.Nn37ffqkhJadETMlz1WuWAHaHa?w=160&h=180&c=7&r=0&o=5&dpr=1.3&pid=1.7" : data.Poster} className='posterClass' alt="..." />
-                </div>  <div className="card-body">
-                    <h5 className="card-title">{data.Title}</h5>
-                    <h4>{data.Year}</h4>
-                    <h6>{data.Type}</h6>
-                    <p className="card-text">Some quick example text to build on the card title and make up the bulk of the card's content.</p>
-                    <Link to={`/detail/${data.imdbID}`} className="btn btn-primary">Detail</Link>
-                </div>
-            </div>
+          {similarity && (
+            <div className="similarity-badge">{similarity}% Match</div>
+          )}
         </div>
 
-
-
-
-
-
-    )
+        <div className="movie-info">
+          <h4 className="movie-title">{data.Title}</h4>
+          <p className="movie-year">{data.Year}</p>
+        </div>
+      </div>
+    </Link>
+  );
 }

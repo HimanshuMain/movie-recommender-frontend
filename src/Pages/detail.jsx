@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from "react";
-import { Badge, Stack } from "react-bootstrap";
-import { Link, useParams } from "react-router-dom";
-import "bootstrap/dist/css/bootstrap.min.css";
+import { useParams, Link } from "react-router-dom";
+import useWatchlist from "../hooks/useWatchlist";
+import "../App.css";
 
 export default function Detail() {
   const { id } = useParams();
   const [movie, setMovie] = useState(null);
-  const [genres, setGenres] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const { toggleWatchlist, isSaved } = useWatchlist();
 
   useEffect(() => {
     async function fetchMovie() {
@@ -15,67 +16,47 @@ export default function Detail() {
       );
       const data = await res.json();
       setMovie(data);
-      if (data.Genre) {
-        setGenres(data.Genre.split(","));
-      }
+      setLoading(false);
     }
     fetchMovie();
   }, [id]);
 
-  if (!movie) {
-    return <p className="text-center mt-5">Loading movie details...</p>;
+  if (loading) {
+    return <p className="loading-text">Loading movie details…</p>;
   }
 
   return (
-    <div className="outer-main">
-      <div className="container-detail">
-        <h1 className="detailHeading1">Movie Details</h1>
+    <div className="detail-container">
+      <div className="detail-card">
+        <img src={movie.Poster} alt={movie.Title} className="detail-poster" />
 
-        <div className="main">
-          <div className="sub-con-1">
-            <img src={movie.Poster} alt={movie.Title} className="posterClass" />
+        <div className="detail-info">
+          <h1>{movie.Title}</h1>
+          <p className="muted">
+            {movie.Year} • {movie.Genre} • IMDb {movie.imdbRating}
+          </p>
 
-            <div className="mt-3">
-              {genres.map((g, i) => (
-                <Stack key={i} direction="horizontal" className="my-stack">
-                  <Badge bg="primary">{g}</Badge>
-                </Stack>
-              ))}
-            </div>
+          <p className="plot">{movie.Plot}</p>
+
+          <button
+            className="watchlist-btn"
+            onClick={() => toggleWatchlist(movie)}
+          >
+            {isSaved(movie.imdbID) ? "✓ In Watchlist" : "+ Add to Watchlist"}
+          </button>
+
+          <div className="explain-box">
+            <h4>Why this movie?</h4>
+            <p>
+              This movie is recommended because it shares similar themes,
+              genres, and storytelling patterns with movies you searched for.
+              Our AI compares plot semantics, genres, cast, and directors to
+              find the closest match.
+            </p>
           </div>
 
-          <div className="sub-con-2">
-            <h2 className="detailHeading2">{movie.Title}</h2>
-            <p>
-              <b>Year:</b> {movie.Year}
-            </p>
-            <p>
-              <b>IMDB Rating:</b> ⭐ {movie.imdbRating}
-            </p>
-            <p>
-              <b>Actors:</b> {movie.Actors}
-            </p>
-            <p>
-              <b>Director:</b> {movie.Director}
-            </p>
-            <p>
-              <b>Genre:</b> {movie.Genre}
-            </p>
-            <p className="mt-3">{movie.Plot}</p>
-
-            <hr />
-
-            <p className="text-muted">
-              Recommendations for this movie are generated using
-              <b> content-based machine learning</b> by comparing movie
-              features.
-            </p>
-          </div>
-        </div>
-
-        <div className="btn-container mt-4">
-          <Link to="/" className="btn btn-primary">
-            ⬅ Back to Home
+          <Link to="/" className="back-link">
+            ← Back to home
           </Link>
         </div>
       </div>
