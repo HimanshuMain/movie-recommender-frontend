@@ -9,12 +9,11 @@ export default function Home() {
   const [recommended, setRecommended] = useState([]);
   const [theme, setTheme] = useState("dark");
   const [loading, setLoading] = useState(false);
+  const [mlLoading, setMlLoading] = useState(false);
   const [infoText, setInfoText] = useState("");
 
-  // In-memory OMDB cache
   const omdbCache = useRef({});
 
-  // Apply theme + load cache
   useEffect(() => {
     document.body.className = theme === "dark" ? "dark-theme" : "light-theme";
 
@@ -24,11 +23,9 @@ export default function Home() {
     }
   }, [theme]);
 
-  const toggleTheme = () => {
-    setTheme(theme === "dark" ? "light" : "dark");
-  };
+  const toggleTheme = () => setTheme(theme === "dark" ? "light" : "dark");
 
-  // 🔍 Search movies from OMDB
+  // SEARCH MOVIES
   async function searchMovies() {
     if (!search.trim()) return;
 
@@ -50,16 +47,17 @@ export default function Home() {
       } else {
         setInfoText("No results found");
       }
-    } catch (err) {
-      console.error(err);
+    } catch {
       setInfoText("Something went wrong");
     }
 
     setLoading(false);
   }
 
-  // 🤖 Fetch ML recommendations + enrich with OMDB (cached)
+  // ML RECOMMENDATIONS
   async function fetchMLRecommendations(title) {
+    setMlLoading(true);
+
     try {
       const res = await fetch(
         `https://movie-recommender-ml-backend.onrender.com/recommend?title=${title}`
@@ -68,7 +66,6 @@ export default function Home() {
 
       const enriched = await Promise.all(
         data.recommendations.map(async (rec) => {
-          // Check cache first
           if (omdbCache.current[rec.title]) {
             return {
               ...omdbCache.current[rec.title],
@@ -76,13 +73,11 @@ export default function Home() {
             };
           }
 
-          // Fetch from OMDB
           const omdbRes = await fetch(
             `https://www.omdbapi.com/?t=${rec.title}&apikey=d85b58ea`
           );
           const omdbData = await omdbRes.json();
 
-          // Save to cache
           omdbCache.current[rec.title] = omdbData;
           localStorage.setItem("omdbCache", JSON.stringify(omdbCache.current));
 
@@ -94,19 +89,20 @@ export default function Home() {
       );
 
       setRecommended(enriched);
-    } catch (err) {
-      console.error("ML backend not responding yet");
+    } catch {
+      console.log("ML backend waking up…");
+    } finally {
+      setMlLoading(false);
     }
   }
 
-  // ⌨️ Enter key search
   const handleKeyDown = (e) => {
     if (e.key === "Enter") searchMovies();
   };
 
   return (
     <div className="home-wrapper">
-      {/* ===== HEADER ===== */}
+      {/* HEADER */}
       <header className="top-bar">
         <h1 className="app-title">MovieLens AI</h1>
         <button className="theme-btn" onClick={toggleTheme}>
@@ -114,7 +110,7 @@ export default function Home() {
         </button>
       </header>
 
-      {/* ===== SEARCH ===== */}
+      {/* SEARCH */}
       <section className="search-section">
         <input
           className="search-input"
@@ -126,24 +122,22 @@ export default function Home() {
         />
       </section>
 
-      {/* ===== IDLE STATE ===== */}
+      {/* IDLE STATE */}
       {!loading && movies.length === 0 && !infoText && (
         <div className="idle-state">
           <h2>🎬 Welcome to MovieLens AI</h2>
           <p>
-            Discover movies intelligently using Machine Learning–based
-            recommendations.
+            Search any movie to get intelligent recommendations powered by
+            Machine Learning.
           </p>
           <p className="muted">
-            Try searching for: Inception, Interstellar, Avatar, Titanic
+            Try: Inception, Interstellar, Avatar, Harry Potter
           </p>
         </div>
       )}
 
-      {/* ===== INFO TEXT ===== */}
       {infoText && <p className="info-text">{infoText}</p>}
 
-      {/* ===== LOADING SKELETON ===== */}
       {loading && (
         <div className="movie-grid">
           {Array.from({ length: 4 }).map((_, i) => (
@@ -152,7 +146,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* ===== SEARCH RESULTS ===== */}
       {movies.length > 0 && !loading && (
         <section className="section">
           <h3 className="section-title">Search Results</h3>
@@ -164,8 +157,22 @@ export default function Home() {
         </section>
       )}
 
-      {/* ===== AI RECOMMENDATIONS ===== */}
-      {recommended.length > 0 && (
+      {mlLoading && (
+        <section className="section">
+          <h3 className="section-title">Preparing AI recommendations…</h3>
+          <p className="muted">
+            Waking up recommendation engine (first request may take a moment)
+          </p>
+          <div className="movie-grid">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <SkeletonCard key={i} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* AI RECOMMENDATIONS */}
+      {recommended.length > 0 && !mlLoading && (
         <section className="section">
           <h3 className="section-title">Recommended for You (AI)</h3>
           <div className="movie-grid">
